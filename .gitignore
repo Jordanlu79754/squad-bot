@@ -1,0 +1,18 @@
+# Ignore the virtual environment directory
+venv/
+
+# Ignore the .env file containing sensitive data
+.env
+
+# Ignore Python cache files
+__pycache__/
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+
+# Ignore IDE or editor-specific files (for example, VSCode)
+.vscode/
+
+# Ignore system-specific files (e.g., macOS)
+.DS_Store

@@ -6,6 +6,7 @@ import os
 import time  # Added to handle timing for file deletion
 import asyncio
 import random
+import csv
 
 # Ensure 'downloads/' directory exists
 os.makedirs('downloads', exist_ok=True)
@@ -55,7 +56,7 @@ song_queue = []  # Stores a list of queued songs
 
 # Loads text file for truth or dare
 def load_prompts(filename):
-    with open(filename, 'r') as file:
+    with open(filename, 'r', encoding='utf-8') as file:
         prompts = file.readlines()
     return [prompt.strip() for prompt in prompts]
 
@@ -64,6 +65,20 @@ truths = load_prompts('truth.txt')
 dares = load_prompts('dare.txt')
 truths18 = load_prompts('truth18.txt')
 dares18 = load_prompts('dare18.txt')
+magic8balltext = load_prompts('magic8ball.txt')
+
+def load_country_data(file_path):
+    countries = []
+    with open(file_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Skip header
+        for row in reader:
+            country = {
+                'alpha2': row[1],
+                'name': row[3]  # This depends on the flag data format
+            }
+            countries.append(country)
+    return countries
 
 # Bot events
 @bot.event
@@ -300,11 +315,21 @@ async def skip(ctx):
     else:
         await ctx.send("No music is currently playing!")
 
-@bot.command()
+@bot.command(aliases=["cl"])
 async def commands_list(ctx):
     """Sends a list of registered commands."""
-    commands = [cmd.name for cmd in bot.commands]
-    await ctx.send(f"Registered commands: {', '.join(commands)}")
+    commands = []
+    for cmd in bot.commands:
+        if cmd.aliases:
+            alias_list = ', '.join(cmd.aliases)
+            commands.append(f"{cmd.name} (Also use: {alias_list})")
+        else:
+            commands.append(f"{cmd.name}")  # No aliases, just the command name
+
+    # Construct the response message with proper formatting
+    commands_message = "\n- ".join(commands)
+    await ctx.send(f"Registered commands (Prefix: {bot.command_prefix}):\n- {commands_message}")
+
 
 @bot.command()
 async def remove(ctx, position: int):
@@ -326,29 +351,166 @@ async def show_queue(ctx):
     queue_list = "\n".join([f"{idx+1}. {song['title']}" for idx, song in enumerate(song_queue)])
     await ctx.send(f"**Current Queue:**\n{queue_list}")
 
-# Bot command for !truth
-@bot.command()
-async def truth(ctx):
-    truth_prompt = random.choice(truths)
-    await ctx.send(truth_prompt)
+# Bot command for truth or dare
+@bot.command(aliases=["tod"])
+async def truthordare(ctx):
+    await ctx.send("Truth or dare? (Or truth18/dare18). Type 'quit' to stop")
+    def check(message):
+        return message.author == ctx.author and message.channel == ctx.channel
+    
+    try:
+        msg = await bot.wait_for('message', check=check, timeout=30.0)
+        # Access the user's response
+        user_response = msg.content.lower()
+        if user_response == 'truth':
+            truth_prompt = random.choice(truths)
+            await ctx.send(truth_prompt)
+        elif user_response == 'dare':
+            dare_prompt = random.choice(dares)
+            await ctx.send(dare_prompt)
+        elif user_response == 'truth18':
+            truths18_prompt = random.choice(truths18)
+            await ctx.send(truths18_prompt)
+        elif user_response == 'dare18':
+            dares18_prompt = random.choice(dares18)
+            await ctx.send(dares18_prompt)
+        elif user_response == 'quit':
+            await ctx.send("Alright, quitting Truth or Dare. Thanks for playing!")
+            return  # End the function here to stop further processing
+        else:
+            await ctx.send("Invalid response. Please choose 'truth', 'dare', 'truth18', or 'dare18'.")
+        
+    except asyncio.TimeoutError:
+        await ctx.send("You took too long to respond!")
 
-# Bot command for !dare
-@bot.command()
-async def dare(ctx):
-    dare_prompt = random.choice(dares)
-    await ctx.send(dare_prompt)
 
-# Bot command for !truth18
-@bot.command()
-async def truth18(ctx):
-    truth_prompt = random.choice(truths18)
-    await ctx.send(truth_prompt)
+@bot.command(aliases=["m8b"])
+async def magic8ball(ctx):
+    def check(message):
+        return message.author == ctx.author and message.channel == ctx.channel
 
-# Bot command for !dare18
-@bot.command()
-async def dare18(ctx):
-    dare_prompt = random.choice(dares18)
-    await ctx.send(dare_prompt)
+    try:
+        # Pick a random Magic 8-Ball response
+        magic8ball_prompt = random.choice(magic8balltext)
+        await ctx.send(magic8ball_prompt)
+    except Exception as e:
+        await ctx.send(f"Something went wrong: {str(e)}")
+
+@bot.command(aliases=["ct"])
+async def countrytrivia(ctx, num_questions: int = 5):
+    await ctx.send("Ready? Type 'quit' to stop")
+    num_questions = max(1, min(num_questions, 20))
+    countries = load_country_data('world.csv')
+
+    for i in range(num_questions):
+        country = random.choice(countries)
+        flag = f"48x48/{country['alpha2'].lower()}.png"
+        await ctx.send("Guess the country of this flag!")
+        await ctx.send(file=discord.File(flag))
+
+        def check(message):
+            return message.author == ctx.author and message.channel == ctx.channel
+        
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=30.0)
+            user_guess = msg.content.lower()
+
+            if user_guess == country['name'].lower():
+                await ctx.send("Correct! 🎉")
+            elif user_guess == 'quit':
+                await ctx.send("Game ended early. Thanks for playing!")
+                return
+            else:
+                await ctx.send(f"Wrong! The correct answer was {country['name']}.")
+
+        except asyncio.TimeoutError:
+            await ctx.send(f"Time's up! The correct answer was {country['name']}.")
+        # Remove the used country to avoid repetition
+        countries.remove(country)
+
+    await ctx.send("Trivia game over! Thanks for playing!")
+
+
+
+
+# Tic Tac Toe board
+def print_board(board):
+    return f"""
+    ```
+    {board[0]} | {board[1]} | {board[2]}
+    ---------
+    {board[3]} | {board[4]} | {board[5]}
+    ---------
+    {board[6]} | {board[7]} | {board[8]}
+    ```
+    """
+
+# Check if a player has won
+def check_winner(board, player):
+    win_conditions = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],  # Rows
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],  # Columns
+        [0, 4, 8], [2, 4, 6]  # Diagonals
+    ]
+    for condition in win_conditions:
+        if board[condition[0]] == board[condition[1]] == board[condition[2]] == player:
+            return True
+    return False
+
+# Check if the game is a draw
+def check_draw(board):
+    return all([spot != " " for spot in board])
+
+# Tic Tac Toe Game Command with alias
+@bot.command(aliases=["ttt"])
+async def tictactoe(ctx, opponent: discord.User):
+    # Initialize the board with empty spaces
+    board = [" "] * 9
+    current_player = ctx.author  # The first player is the one who invoked the command
+    current_symbol = "X"  # X always starts
+    players = {ctx.author: "X", opponent: "O"}
+
+    await ctx.send(f"Starting a game of Tic Tac Toe! {ctx.author.mention} (X) vs {opponent.mention} (O) Use quit to exit")
+
+    # Display the empty board
+    game_message = await ctx.send(print_board(board))
+    
+    def check(msg):
+        return msg.author == current_player and msg.content.isdigit() and int(msg.content) in range(1, 10) and board[int(msg.content) - 1] == " "
+
+    while True:
+        # Ask the current player for their move
+        await ctx.send(f"{current_player.mention}, it's your turn! Type a number (1-9) to place your {current_symbol}.")
+        
+        try:
+            # Wait for the player's input (the number they want to place their symbol on)
+            move_msg = await bot.wait_for("message", check=check, timeout=60.0)
+            if move_msg.content.lower() == "quit":
+                await ctx.send(f"{current_player.mention} has ended the game. Thanks for playing!")
+                return
+            move = int(move_msg.content) - 1
+        except asyncio.TimeoutError:
+            await ctx.send(f"{current_player.mention} took too long! Game over.")
+            return
+        
+        # Update the board
+        board[move] = current_symbol
+        await game_message.edit(content=print_board(board))
+
+        # Check if the current player has won
+        if check_winner(board, current_symbol):
+            await ctx.send(f"{current_player.mention} wins! 🎉")
+            return
+
+        # Check for draw
+        if check_draw(board):
+            await ctx.send("It's a draw! 🙁")
+            return
+
+        # Switch turns
+        current_player = opponent if current_player == ctx.author else ctx.author
+        current_symbol = players[current_player]
+
 
 # Run the bot
 if __name__ == "__main__":

@@ -3,8 +3,8 @@ from discord.ext import commands
 import yt_dlp as youtube_dl
 from dotenv import load_dotenv
 import os
-import time  # Added to handle timing for file deletion
 import asyncio
+import time
 import random
 import csv
 
@@ -32,7 +32,7 @@ INITIAL_VOLUME = 0.8  # 80% volume
 # Global YouTube Downloader options
 ydl_opts = {
     'format': 'bestaudio/best',  # Get the best audio quality
-    'noplaylist': False,         # Don't download entire playlists initially
+    'noplaylist': False,         # Download entire playlists initially
     'quiet': True,               # Suppress console output from yt-dlp
     'no_warnings': True,         # Suppress warnings
     'outtmpl': 'downloads/%(id)s.%(ext)s',  # Save the file to 'downloads' directory
@@ -41,10 +41,15 @@ ydl_opts = {
         'preferredcodec': 'mp3',      # Convert audio to MP3 format
         'preferredquality': '192',    # 192 kbps MP3
     }],
-    'nocheckcertificate': True,    # Ignore certificate errors
-    'extractaudio': True,          # Force audio extraction from video files
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+    },
+    'nocheckcertificate': True,       # Ignore certificate errors
+    'extractaudio': True,             # Force audio extraction from video files
     'cookiefile': 'www.youtube.com_cookies.txt',  # Path to the YouTube cookies file
 }
+
 
 FFMPEG_OPTIONS = {
     'executable': 'ffmpeg',  # Assuming ffmpeg is in PATH
@@ -54,19 +59,22 @@ FFMPEG_OPTIONS = {
 # Song queue initialization
 song_queue = []  # Stores a list of queued songs
 
-# Loads text file for truth or dare
+# Loads text file for truth or dare prompts
 def load_prompts(filename):
     with open(filename, 'r', encoding='utf-8') as file:
         prompts = file.readlines()
     return [prompt.strip() for prompt in prompts]
 
-# Truth or dare 
+# Truth or dare prompts
 truths = load_prompts('truth.txt')
 dares = load_prompts('dare.txt')
 truths18 = load_prompts('truth18.txt')
 dares18 = load_prompts('dare18.txt')
+
+# Magic 8 ball prompts
 magic8balltext = load_prompts('magic8ball.txt')
 
+# CSV file reading for the Country Trivia game
 def load_country_data(file_path):
     countries = []
     with open(file_path, newline='', encoding='utf-8') as csvfile:
@@ -95,10 +103,9 @@ async def on_command_error(ctx, error):
     await ctx.send(f"An error occurred: {str(error)}")
     print(f"Command error: {error}")
 
-# Commands
+# Making the bot join the voice channel
 @bot.command()
 async def join(ctx):
-    """Command for the bot to join the user's voice channel."""
     if ctx.author.voice:
         if ctx.voice_client:
             await ctx.voice_client.disconnect()
@@ -108,18 +115,18 @@ async def join(ctx):
     else:
         await ctx.send("You need to be in a voice channel for me to join!")
 
+# Making the bot leave the voice channel
 @bot.command()
 async def leave(ctx):
-    """Command for the bot to leave the voice channel."""
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("Left the voice channel.")
     else:
         await ctx.send("I'm not connected to a voice channel!")
 
+# Command for playing song
 @bot.command()
 async def play(ctx, *, query: str):
-    """Play audio from a given URL or keyword."""
     if not ctx.author.voice:
         await ctx.send("You need to join a voice channel first.")
         return
@@ -132,7 +139,7 @@ async def play(ctx, *, query: str):
 
     # Handle search terms or URLs
     if not query.startswith("http://") and not query.startswith("https://"):
-        query = f"ytsearch:{query}"  # Use yt-dlp's search feature
+        query = f"ytsearch:{query}"  # Use yt-dlp's search feature based on user input of the name of the song
 
     try:
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
@@ -162,7 +169,7 @@ async def play(ctx, *, query: str):
             # Start playing if nothing is currently playing
             if not ctx.voice_client.is_playing():
                 await play_next(ctx)
-
+    
     except youtube_dl.utils.DownloadError as e:
         await ctx.send("Error downloading the song.")
         print(f"Download error: {e}")
@@ -170,9 +177,9 @@ async def play(ctx, *, query: str):
         await ctx.send("An unexpected error occurred.")
         print(f"Unexpected error: {e}")
 
+# Command to play all the songs in a Youtube playlist 
 @bot.command()
 async def play_playlist(ctx, *, playlist_url: str):
-    """Play all songs from a playlist URL."""
     # Check if the user is in a voice channel
     if not ctx.author.voice:
         await ctx.send("You need to join a voice channel first.")
@@ -221,8 +228,8 @@ async def play_playlist(ctx, *, playlist_url: str):
             await ctx.send("An unexpected error occurred.")
             print(f"Unexpected error: {e}")
 
+#Play the next song in the queue
 async def play_next(ctx):
-    """Play the next song in the queue."""
     if song_queue:
         song = song_queue.pop(0)  # Get the first song in the queue
         song_path = song['path']
@@ -250,16 +257,17 @@ async def play_next(ctx):
             await ctx.send("Not connected to a voice channel.")
     else:
         await ctx.send("Queue is empty. Disconnecting...")
-        await ctx.voice_client.disconnect()
+        if ctx.voice_client:
+            await ctx.voice_client.disconnect()
 
 # Define the async function that handles file deletion
 async def after_playing_async(ctx, song_path):
-    """Handle the cleanup and file deletion after the song finishes."""
+    # Handle the cleanup and file deletion after the song finishes
     # Wait for ffmpeg process to terminate and the file to be released
     await asyncio.sleep(1)  # Non-blocking sleep
 
     try:
-        os.remove(song_path)
+        os.remove(song_path) # Works most of the time for some reason
         print(f"File deleted: {song_path}")
     except PermissionError as e:
         print(f"PermissionError: {e}. Could not delete file.")
@@ -268,36 +276,36 @@ async def after_playing_async(ctx, song_path):
     if song_queue:
         await play_next(ctx)  # Pass ctx to `play_next` to continue the queue
 
+# Stops the currently playing music
 @bot.command()
 async def stop(ctx):
-    """Stops the currently playing music."""
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()
         await ctx.send("Music stopped.")
     else:
         await ctx.send("No music is currently playing!")
 
+# Pauses the currently playing music
 @bot.command()
 async def pause(ctx):
-    """Pauses the currently playing music."""
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.pause()
         await ctx.send("Music paused.")
     else:
         await ctx.send("No music is currently playing!")
 
+# Resume the paused music
 @bot.command()
 async def resume(ctx):
-    """Resumes paused music."""
     if ctx.voice_client and ctx.voice_client.is_paused():
         ctx.voice_client.resume()
         await ctx.send("Music resumed.")
     else:
         await ctx.send("No music is currently paused!")
 
+# Move a song to the top of the queue
 @bot.command()
 async def prioritize(ctx, position: int):
-    """Move a song to the top of the queue."""
     if position < 1 or position > len(song_queue):
         await ctx.send("Invalid position! Use a number corresponding to the song's position in the queue.")
         return
@@ -306,18 +314,18 @@ async def prioritize(ctx, position: int):
     song_queue.insert(0, song)  # Add the song to the top of the queue
     await ctx.send(f"Prioritized: {song['title']} and moved it to the top of the queue.")
 
+# Skips the currently playing song
 @bot.command()
 async def skip(ctx):
-    """Skips the currently playing song."""
     if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()  # Stops the current song
         await play_next(ctx)  # Play the next song in the queue (ensure play_next is awaited)
     else:
         await ctx.send("No music is currently playing!")
 
+# Sends a list of registered commands
 @bot.command(aliases=["cl"])
 async def commands_list(ctx):
-    """Sends a list of registered commands."""
     commands = []
     for cmd in bot.commands:
         if cmd.aliases:
@@ -330,10 +338,9 @@ async def commands_list(ctx):
     commands_message = "\n- ".join(commands)
     await ctx.send(f"Registered commands (Prefix: {bot.command_prefix}):\n- {commands_message}")
 
-
+# Remove the song from queue by the position number
 @bot.command()
 async def remove(ctx, position: int):
-    """Remove a song from the queue by its position."""
     if position < 1 or position > len(song_queue):
         await ctx.send("Invalid position! Use a number corresponding to the song's position in the queue.")
         return
@@ -341,9 +348,9 @@ async def remove(ctx, position: int):
     removed_song = song_queue.pop(position - 1)
     await ctx.send(f"Removed: {removed_song['title']} from the queue.")
 
+# Shows the current song queue
 @bot.command(name="queue")
 async def show_queue(ctx):
-    """Shows the current song queue."""
     if not song_queue:
         await ctx.send("The queue is currently empty!")
         return
@@ -383,7 +390,7 @@ async def truthordare(ctx):
     except asyncio.TimeoutError:
         await ctx.send("You took too long to respond!")
 
-
+# Magic 8 ball
 @bot.command(aliases=["m8b"])
 async def magic8ball(ctx):
     def check(message):
@@ -425,7 +432,7 @@ async def countrytrivia(ctx, num_questions: int = 5):
 
         except asyncio.TimeoutError:
             await ctx.send(f"Time's up! The correct answer was {country['name']}.")
-        # Remove the used country to avoid repetition
+        # Remove the used country in the current game to avoid repetition
         countries.remove(country)
 
     await ctx.send("Trivia game over! Thanks for playing!")

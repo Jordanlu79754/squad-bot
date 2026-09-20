@@ -16,3 +16,11 @@ __pycache__/
 
 # Ignore system-specific files (e.g., macOS)
 .DS_Store
+# Virtualenvs
+.venv/
+
+# Runtime state written by the Helldivers / patch notes cogs
+bot_state.json
+
+# YouTube session cookies -- never commit these
+*cookies.txt

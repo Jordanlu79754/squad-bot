@@ -6,3 +6,9 @@ discord.py==2.4.0
 yt-dlp==2024.12.6
 python-dotenv==1.0.1
 PyNaCl==1.5.0
+
+# Helldivers 2 + patch notes cogs.
+# NOTE: discord.py < 2.5 imports the stdlib `audioop` module, which Python 3.13
+# removed, so the 2.4.0 pin above cannot run on modern Python. 2.6+ is required.
+discord.py>=2.6
+aiohttp>=3.9

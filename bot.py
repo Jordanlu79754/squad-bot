@@ -407,6 +407,7 @@ async def magic8ball(ctx):
 async def countrytrivia(ctx, num_questions: int = 5):
     await ctx.send("Ready? Type 'quit' to stop")
     num_questions = max(1, min(num_questions, 20))
+    right_answers = 0
     countries = load_country_data('world.csv')
 
     for i in range(num_questions):
@@ -424,6 +425,7 @@ async def countrytrivia(ctx, num_questions: int = 5):
 
             if user_guess == country['name'].lower():
                 await ctx.send("Correct! 🎉")
+                right_answers = right_answers + 1
             elif user_guess == 'quit':
                 await ctx.send("Game ended early. Thanks for playing!")
                 return
@@ -435,12 +437,14 @@ async def countrytrivia(ctx, num_questions: int = 5):
         # Remove the used country in the current game to avoid repetition
         countries.remove(country)
 
+    await ctx.send(f"You got {right_answers}/{num_questions} correct answers!")
+
     await ctx.send("Trivia game over! Thanks for playing!")
 
 
 
 
-# Tic Tac Toe board
+# Print the game board
 def print_board(board):
     return f"""
     ```
@@ -466,40 +470,51 @@ def check_winner(board, player):
 
 # Check if the game is a draw
 def check_draw(board):
-    return all([spot != " " for spot in board])
+    return all(spot != " " for spot in board)
 
 # Tic Tac Toe Game Command with alias
 @bot.command(aliases=["ttt"])
 async def tictactoe(ctx, opponent: discord.User):
+    if opponent.bot:
+        await ctx.send("You can't play Tic Tac Toe with a bot!")
+        return
+
     # Initialize the board with empty spaces
     board = [" "] * 9
     current_player = ctx.author  # The first player is the one who invoked the command
     current_symbol = "X"  # X always starts
     players = {ctx.author: "X", opponent: "O"}
 
-    await ctx.send(f"Starting a game of Tic Tac Toe! {ctx.author.mention} (X) vs {opponent.mention} (O) Use quit to exit")
+    await ctx.send(f"Starting a game of Tic Tac Toe! {ctx.author.mention} (X) vs {opponent.mention} (O). Use `quit` to exit.")
 
     # Display the empty board
     game_message = await ctx.send(print_board(board))
-    
+
+    # Define a check function for valid moves
     def check(msg):
-        return msg.author == current_player and msg.content.isdigit() and int(msg.content) in range(1, 10) and board[int(msg.content) - 1] == " "
+        return (
+            msg.author == current_player and
+            (msg.content.isdigit() and int(msg.content) in range(1, 10) and board[int(msg.content) - 1] == " ") or
+            msg.content.lower() == "quit"
+        )
 
     while True:
         # Ask the current player for their move
         await ctx.send(f"{current_player.mention}, it's your turn! Type a number (1-9) to place your {current_symbol}.")
-        
+
         try:
             # Wait for the player's input (the number they want to place their symbol on)
             move_msg = await bot.wait_for("message", check=check, timeout=60.0)
+
             if move_msg.content.lower() == "quit":
                 await ctx.send(f"{current_player.mention} has ended the game. Thanks for playing!")
                 return
+
             move = int(move_msg.content) - 1
         except asyncio.TimeoutError:
             await ctx.send(f"{current_player.mention} took too long! Game over.")
             return
-        
+
         # Update the board
         board[move] = current_symbol
         await game_message.edit(content=print_board(board))
@@ -509,7 +524,7 @@ async def tictactoe(ctx, opponent: discord.User):
             await ctx.send(f"{current_player.mention} wins! 🎉")
             return
 
-        # Check for draw
+        # Check for a draw
         if check_draw(board):
             await ctx.send("It's a draw! 🙁")
             return
@@ -517,7 +532,6 @@ async def tictactoe(ctx, opponent: discord.User):
         # Switch turns
         current_player = opponent if current_player == ctx.author else ctx.author
         current_symbol = players[current_player]
-
 
 # Run the bot
 if __name__ == "__main__":

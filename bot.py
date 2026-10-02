@@ -47,8 +47,11 @@ ydl_opts = {
     },
     'nocheckcertificate': True,       # Ignore certificate errors
     'extractaudio': True,             # Force audio extraction from video files
-    'cookiefile': 'www.youtube.com_cookies.txt',  # Path to the YouTube cookies file
 }
+
+# Optional: a YouTube cookies export helps with age-restricted videos. Never commit it.
+if os.path.exists('www.youtube.com_cookies.txt'):
+    ydl_opts['cookiefile'] = 'www.youtube.com_cookies.txt'
 
 
 FFMPEG_OPTIONS = {
@@ -68,8 +71,6 @@ def load_prompts(filename):
 # Truth or dare prompts
 truths = load_prompts('truth.txt')
 dares = load_prompts('dare.txt')
-truths18 = load_prompts('truth18.txt')
-dares18 = load_prompts('dare18.txt')
 
 # Magic 8 ball prompts
 magic8balltext = load_prompts('magic8ball.txt')
@@ -361,7 +362,7 @@ async def show_queue(ctx):
 # Bot command for truth or dare
 @bot.command(aliases=["tod"])
 async def truthordare(ctx):
-    await ctx.send("Truth or dare? (Or truth18/dare18). Type 'quit' to stop")
+    await ctx.send("Truth or dare? Type 'quit' to stop")
     def check(message):
         return message.author == ctx.author and message.channel == ctx.channel
     
@@ -375,17 +376,11 @@ async def truthordare(ctx):
         elif user_response == 'dare':
             dare_prompt = random.choice(dares)
             await ctx.send(dare_prompt)
-        elif user_response == 'truth18':
-            truths18_prompt = random.choice(truths18)
-            await ctx.send(truths18_prompt)
-        elif user_response == 'dare18':
-            dares18_prompt = random.choice(dares18)
-            await ctx.send(dares18_prompt)
         elif user_response == 'quit':
             await ctx.send("Alright, quitting Truth or Dare. Thanks for playing!")
             return  # End the function here to stop further processing
         else:
-            await ctx.send("Invalid response. Please choose 'truth', 'dare', 'truth18', or 'dare18'.")
+            await ctx.send("Invalid response. Please choose 'truth' or 'dare'.")
         
     except asyncio.TimeoutError:
         await ctx.send("You took too long to respond!")

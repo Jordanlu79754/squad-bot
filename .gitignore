@@ -24,3 +24,10 @@ bot_state.json
 
 # YouTube session cookies -- never commit these
 *cookies.txt
+
+# Audio downloaded by the music player
+downloads/
+*.mp3
+*.webm
+*.m4a
+*.opus
